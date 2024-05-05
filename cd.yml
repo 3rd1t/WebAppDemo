@@ -1,0 +1,88 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- none
+ 
+variables:
+  IISWebsiteName: 'WebAppDemo'
+ 
+resources:
+  pipelines:
+  - pipeline: 'buildPipeline'
+    project: 'WebAppDemo'
+    source: 'Build pipeline'
+    branch: 'main'
+    trigger: true
+ 
+stages:
+  - stage: DeployWebsite
+    displayName: 'Deploy website'       
+    pool:
+      name: 'default'
+     
+    jobs:   
+    - deployment: DeployWebsite
+      displayName: 'Deploy website'
+      environment: 'Dev.LAPTOP-Q9VNQJKR'
+      strategy:
+       runOnce:
+         deploy:          
+          steps:
+          - checkout: none
+           
+          - download: 'buildPipeline'
+            name: 'DownloadBuildArtifacts'           
+            displayName: 'Download build artifacts'
+            artifact: 'build'
+
+          - task: IISWebAppManagementOnMachineGroup@0
+            inputs:
+              IISDeploymentType: 'IISWebsite'
+              ActionIISWebsite: 'CreateOrUpdateWebsite'
+              WebsiteName: '${{ variables.IISWebsiteName }}'
+              WebsitePhysicalPath: '%SystemDrive%\inetpub\wwwroot\WebAppDemo'
+              WebsitePhysicalPathAuth: 'WebsiteUserPassThrough'
+              AddBinding: true
+              Bindings: |
+                {
+                    bindings:[
+                        {
+                            "protocol":"http",
+                            "ipAddress":"All Unassigned",
+                            "hostname":"",
+                            "port":"8084"
+                        }
+                    ]
+                }
+              CreateOrUpdateAppPoolForWebsite: true
+              AppPoolNameForWebsite: 'DotnetCore'
+              DotNetVersionForWebsite: 'No Managed Code'
+              PipeLineModeForWebsite: 'Integrated'
+              AppPoolIdentityForWebsite: 'ApplicationPoolIdentity'
+
+          - task: IISWebAppManagementOnMachineGroup@0
+            name: 'StopIIS'
+            displayName: 'Stop IIS website - ${{ variables.IISWebsiteName }}'
+            inputs:
+              IISDeploymentType: 'IISWebsite'
+              ActionIISWebsite: 'StopWebsite'
+              StartStopWebsiteName: '${{ variables.IISWebsiteName }}'         
+                           
+          - task: IISWebAppDeploymentOnMachineGroup@0
+            name: 'DeployIIS'
+            displayName: 'Deploy IIS website - ${{ variables.IISWebsiteName }}'         
+            inputs:
+              WebSiteName: '${{ variables.IISWebsiteName }}'             
+              Package: '$(Pipeline.Workspace)\buildPipeline\**\*.zip'
+              TakeAppOfflineFlag: true
+           
+          - task: IISWebAppManagementOnMachineGroup@0
+            name: 'StartIIS'
+            displayName: 'Start IIS website - ${{ variables.IISWebsiteName }}'               
+            inputs:
+              IISDeploymentType: 'IISWebsite'
+              ActionIISWebsite: 'StartWebsite'
+              StartStopWebsiteName: '${{ variables.IISWebsiteName }}'
